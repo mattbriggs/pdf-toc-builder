@@ -33,7 +33,7 @@ A CSV file with the following output:
 
     ```python
     SUBFOLDERS = [r"\path-to-repo1",
-                  r"C\path-to-repo2",
+                  r"\path-to-repo2",
                   r"\path-to-repo3"]
     ```
 
