@@ -16,7 +16,7 @@ from pdfminer.converter import TextConverter
 from pdfminer.layout import LAParams
 from pdfminer.pdfpage import PDFPage
 
-import config
+import config as CF
 
 
 def get_text_from_file(path):
@@ -88,7 +88,7 @@ def get_heading(intext):
 
 
 def get_text_from_page(path_to_pdf):
-    '''With a PDF path and page number, return the text.
+    '''With a PDF path and page number, return truncated text (125 char) text.
     PDF base 0. Whereas the PDF reader is base 1. 39 is 40.'''
     # get length of PDF
     pdfobj = open(path_to_pdf, 'rb')
@@ -124,7 +124,8 @@ def get_text_from_page(path_to_pdf):
         device.close()
         retstr.close()
 
-        text_escape = text.replace("\n", "\\n")
+        text_trunc = text[:125]
+        text_escape = text_trunc.replace("\n", "\\n")
         text_dict[px] = text_escape
 
     return text_dict
@@ -140,7 +141,7 @@ def write_csv(outbody, path):
 
 
 def get_titles_from_repo_paths(list_of_paths):
-    '''Crawl the repository and get the titles'''
+    '''Crawl the repository and get the titles. Remove duplicates.'''
     list_of_file_paths = []
     list_of_h1s = []
     for subfolder in list_of_paths:
@@ -154,13 +155,13 @@ def get_titles_from_repo_paths(list_of_paths):
             list_of_h1s.append(heading)
     dedup = set(list_of_h1s)
     list_of_headings = list(dedup)
-    return list_of_h1s
+    return list_of_headings
 
 
 def create_table_of_contents(pdf_file):
-    '''get the list of headings, get the body texts from PDF, creating headings table.'''
+    '''Get the list of headings, get the body texts from PDF, creating headings table.'''
     toc_table = [["title", "page"]]
-    list_of_headings = get_titles_from_repo_paths(SUBFOLDERS)
+    list_of_headings = get_titles_from_repo_paths(CF.SUBFOLDERS)
     page_content = get_text_from_page(pdf_file)
     page_count = list(page_content.keys())
     used = []
@@ -179,9 +180,7 @@ def main():
     2. Get the PDF and create a dictionary of key values, key page number
        value page contnet.
     3. For each H1 find the page it occurs on. If it has a page, add to the TOC table.
-    4. Sort the TOC table by page number.
-    5. Save the TOC Table.
-    5. Second phase: Add the TOC table to a word doc save the word doc.
+    4. Save the TOC Table.
     '''
 
     print("Starting")
