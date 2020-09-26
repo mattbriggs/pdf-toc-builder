@@ -8,6 +8,7 @@
 import csv
 import os
 from io import StringIO
+import threading
 import PyPDF2 as pypdf
 import markdown
 from bs4 import BeautifulSoup
@@ -17,6 +18,31 @@ from pdfminer.layout import LAParams
 from pdfminer.pdfpage import PDFPage
 
 import config as CF
+
+
+def get_split(numtosplit):
+    '''Split a number into four equal(ish) sections. Number of pages must be greater
+    than 13.'''
+    if numtosplit > 13:
+        sections = []
+        breaksize = int(numtosplit/4)
+        sec1_start = 0
+        sec1_end = breaksize
+        sec2_start = breaksize + 1
+        sec2_end = breaksize * 2
+        sec3_start = sec2_end + 1
+        sec3_end = breaksize * 3
+        sec4_start = sec3_end +1
+        sec4_end = numtosplit
+
+        sections = [(sec1_start, sec1_end),
+                    (sec2_start, sec2_end),
+                    (sec3_start, sec3_end),
+                    (sec4_start, sec4_end)]
+
+        return sections
+
+    raise ValueError("Number too small to split into four sections.")
 
 
 def get_text_from_file(path):
@@ -87,18 +113,12 @@ def get_heading(intext):
         return ""
 
 
-def get_text_from_page(path_to_pdf):
+def get_text_from_page(indexstart, indexend, page_content, path_to_pdf):
     '''With a PDF path and page number, return truncated text (125 char) text.
     PDF base 0. Whereas the PDF reader is base 1. 39 is 40.'''
-    # get length of PDF
-    pdfobj = open(path_to_pdf, 'rb')
-    pdfread = pypdf.PdfFileReader(pdfobj)
-    total_pages_zerobase = pdfread.numPages
-    print("Processing length: " + str(total_pages_zerobase))
 
     # retrieve contents as dict
-    text_dict = {}
-    for px in range(total_pages_zerobase):
+    for px in range(indexstart, indexend):
         print("Processing.... page {}".format(px))
 
         # create device
@@ -126,9 +146,9 @@ def get_text_from_page(path_to_pdf):
 
         text_trunc = text[:125]
         text_escape = text_trunc.replace("\n", "\\n")
-        text_dict[px] = text_escape
+        page_content[px] = text_escape
 
-    return text_dict
+    return page_content
 
 
 def write_csv(outbody, path):
@@ -158,14 +178,31 @@ def get_titles_from_repo_paths(list_of_paths):
     return list_of_headings
 
 
+def get_content_from_PDF(pdf_file):
+    '''Get contents of a PDF (by path) as a dictionary of page number and text of each page.'''
+    pdf = pypdf.PdfFileReader(pdf_file)
+    pages = pdf.numPages
+    page_content = {}
+    if pages < 13:
+        page_content = get_text_from_page(0, pages, page_content, pdf_file)
+    else:
+        split = get_split(pages)
+        threads = []
+        for i in range(4):
+            th = threading.Thread(target=get_text_from_page, args=(split[i][0], split[i][1], page_content, pdf_file))
+            th.start()
+            threads.append(th)
+        [th.join() for th in threads]
+    return page_content
+
+
 def create_table_of_contents(pdf_file):
     '''Get the list of headings, get the body texts from PDF, creating headings table.'''
     toc_table = [["title", "page"]]
     list_of_headings = get_titles_from_repo_paths(CF.SUBFOLDERS)
-    page_content = get_text_from_page(pdf_file)
-    page_count = list(page_content.keys())
+    page_content = get_content_from_PDF(pdf_file)
     used = []
-    for p in page_count:
+    for p in list(page_content.keys()):
         for h in list_of_headings:
             if h in page_content[p]:
                 if h not in used:
@@ -182,8 +219,6 @@ def main():
     3. For each H1 find the page it occurs on. If it has a page, add to the TOC table.
     4. Save the TOC Table.
     '''
-
-    print("Starting")
 
     print("Before your run this script, you will need to update the config.py file.\n")
 
